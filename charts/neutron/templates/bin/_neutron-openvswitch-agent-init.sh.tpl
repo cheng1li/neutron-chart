@@ -44,6 +44,16 @@ ip link set dev {{ $port }} up
 {{ end }}
 {{- end }}
 
+for bridge in `echo $AUTO_BRIDGE_ADD | tr "," "\n"`
+do
+  brname=${bridge%:*}
+  int=${bridge#*:}
+  ovs-vsctl --no-wait --may-exist add-br $brname
+  if [ -n "$int" ];then
+    ovs-vsctl --no-wait --may-exist add-port $brname $int
+  fi
+done
+
 tunnel_interface="{{- .Values.network.interface.tunnel -}}"
 if [ -z "${tunnel_interface}" ] ; then
     # search for interface with default routing

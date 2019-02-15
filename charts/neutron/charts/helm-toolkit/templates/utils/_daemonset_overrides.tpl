@@ -41,10 +41,10 @@ limitations under the License.
               {{- $_ := set $current_dict "name" $host_data.name }}
 
               {{/* apply overrides */}}
-              {{- $override_conf_copy := $host_data.conf }}
+              {{- $override_conf_copy := $host_data.conf | default dict }}
               {{- $root_conf_copy := omit $context.Values.conf "overrides" }}
               {{- $merged_dict := merge $override_conf_copy $root_conf_copy }}
-              {{- $root_conf_copy2 := dict "conf" $merged_dict }}
+              {{- $root_conf_copy2 := dict "conf" $merged_dict "__network" ($host_data.network | default dict) }}
               {{- $context_values := omit $context.Values "conf" }}
               {{- $root_conf_copy3 := merge $context_values $root_conf_copy2 }}
               {{- $root_conf_copy4 := dict "Values" $root_conf_copy3 }}
@@ -249,6 +249,21 @@ limitations under the License.
     {{- if not $context.Values.__daemonset_yaml.spec.template }}{{- $_ := set $context.Values.__daemonset_yaml.spec "template" dict }}{{- end }}
     {{- if not $context.Values.__daemonset_yaml.spec.template.metadata }}{{- $_ := set $context.Values.__daemonset_yaml.spec.template "metadata" dict }}{{- end }}
     {{- if not $context.Values.__daemonset_yaml.spec.template.metadata.annotations }}{{- $_ := set $context.Values.__daemonset_yaml.spec.template.metadata "annotations" dict }}{{- end }}
+    {{- range $initc := $context.Values.__daemonset_yaml.spec.template.spec.initContainers }}
+      {{- if eq $initc.name "neutron-ovs-agent-init" }}
+        {{- if hasKey $current_dict.nodeData.Values "__network" }}
+          {{- $bridges := list }}
+          {{- range $bridge, $int := $current_dict.nodeData.Values.__network.auto_bridge_add| default list }}
+            {{- $bridges = append $bridges (printf "%s:%s" $bridge ($int|default "")) }}
+          {{- end }}
+          {{- $bridge_add := $bridges | join "," }}
+          {{- $bridge_list := list (dict "name" "AUTO_BRIDGE_ADD" "value" $bridge_add) }}
+          {{- $_ = set $initc "env" $bridge_list }}
+        {{- else if hasKey $initc "env" }}
+          {{- $_ = set $initc "env" list }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
     {{- $cmap := list $current_dict.dns_1123_name $current_dict.nodeData | include $configmap_include }}
     {{- $values_hash := $cmap | quote | sha256sum }}
     {{- $_ := set $context.Values.__daemonset_yaml.spec.template.metadata.annotations "configmap-etc-hash" $values_hash }}
