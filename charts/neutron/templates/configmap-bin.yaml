@@ -14,14 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.configmap_bin }}
-{{- $envAll := . }}
+{{- define "neutron.configmap.bin" }}
+{{- $configMapName := index . 0 }}
+{{- $envAll := index . 1 }}
+{{- with $envAll }}
 {{- $rallyTests := .Values.conf.rally_tests }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: neutron-bin
+  name: {{ $configMapName }}
 data:
 {{- if .Values.images.local_registry.active }}
   image-repo-sync.sh: |
@@ -73,4 +75,10 @@ data:
 {{ tuple "bin/_neutron-server.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   rabbit-init.sh: |
 {{- include "helm-toolkit.scripts.rabbit_init" . | indent 4 }}
+{{- end }}
+{{- end }}
+
+
+{{- if .Values.manifests.configmap_bin }}
+{{- list "neutron-bin" . | include "neutron.configmap.bin" }}
 {{- end }}

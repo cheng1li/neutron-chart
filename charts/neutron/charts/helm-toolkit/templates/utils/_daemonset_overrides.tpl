@@ -42,9 +42,13 @@ limitations under the License.
 
               {{/* apply overrides */}}
               {{- $override_conf_copy := $host_data.conf }}
+              {{- $override_network_copy := $host_data.network }}
               {{- $root_conf_copy := omit $context.Values.conf "overrides" }}
+              {{- $root_network_copy := omit $context.Values.network "overrides" }}
               {{- $merged_dict := merge $override_conf_copy $root_conf_copy }}
+              {{- $merged_dict_network := merge $override_network_copy $root_network_copy }}
               {{- $root_conf_copy2 := dict "conf" $merged_dict }}
+              {{- $_ := set $root_conf_copy2 "network" $merged_dict_network }}
               {{- $context_values := omit $context.Values "conf" }}
               {{- $root_conf_copy3 := merge $context_values $root_conf_copy2 }}
               {{- $root_conf_copy4 := dict "Values" $root_conf_copy3 }}
@@ -189,6 +193,7 @@ limitations under the License.
   {{- $_ := set $context.Values "__daemonset_list" $list_aggregate }}
 
   {{- $_ := set $context.Values "__last_configmap_name" $configmap_name }}
+  {{- $_ := set $context.Values "__last_configmap_bin_name" "neutron-bin" }}
   {{- range $current_dict := $context.Values.__daemonset_list }}
 
     {{- $context_novalues := omit $context "Values" }}
@@ -226,6 +231,14 @@ limitations under the License.
           {{- $_ := set $context.Values.__volume.secret "secretName" $current_dict.dns_1123_name }}
         {{- end }}
       {{- end }}
+      {{- if hasKey $context.Values.__volume "configMap" }}
+        {{- if eq $context.Values.__volume.configMap.name $context.Values.__last_configmap_bin_name }}
+          {{- if eq $context.Values.__volume.configMap.name "neutron-bin" }}
+            {{- $_ := set $context.Values "__is_neutron" true }}
+          {{- end }}
+          {{- $_ := set $context.Values.__volume.configMap "name" $current_dict.dns_1123_name }}
+        {{- end }}
+      {{- end }}
       {{- $updated_list := append $context.Values.__volume_list $context.Values.__volume }}
       {{- $_ := set $context.Values "__volume_list" $updated_list }}
     {{- end }}
@@ -250,15 +263,24 @@ limitations under the License.
     {{- if not $context.Values.__daemonset_yaml.spec.template.metadata }}{{- $_ := set $context.Values.__daemonset_yaml.spec.template "metadata" dict }}{{- end }}
     {{- if not $context.Values.__daemonset_yaml.spec.template.metadata.annotations }}{{- $_ := set $context.Values.__daemonset_yaml.spec.template.metadata "annotations" dict }}{{- end }}
     {{- $cmap := list $current_dict.dns_1123_name $current_dict.nodeData | include $configmap_include }}
+    {{- $cmap_bin := "" }}
+    {{- if and (hasKey $context.Values "__is_neutron") $context.Values.__is_neutron }}
+      {{- $cmap_bin = list $current_dict.dns_1123_name $current_dict.nodeData | include "neutron.configmap.bin" }}
+    {{- end }}
     {{- $values_hash := $cmap | quote | sha256sum }}
     {{- $_ := set $context.Values.__daemonset_yaml.spec.template.metadata.annotations "configmap-etc-hash" $values_hash }}
 
     {{/* generate configmap */}}
 ---
 {{ $cmap }}
+{{- if and (hasKey $context.Values "__is_neutron") $context.Values.__is_neutron }}
+---
+{{ $cmap_bin }}
+{{- end }}
     {{/* generate daemonset yaml */}}
 ---
 {{ $context.Values.__daemonset_yaml | toYaml }}
     {{- $_ := set $context.Values "__last_configmap_name" $current_dict.dns_1123_name }}
+    {{- $_ := set $context.Values "__last_configmap_bin_name" $current_dict.dns_1123_name }}
   {{- end }}
 {{- end }}
